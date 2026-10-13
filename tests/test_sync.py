@@ -140,6 +140,27 @@ def test_backfill_from_month_respects_local_timezone_boundary():
     assert [t.uri for t in plan.buckets[(2026, 11)]] == ["spotify:track:n1", "spotify:track:n2"]
 
 
+def test_backfill_range_includes_both_ends_only():
+    fake = FakeSpotify(LIKED)
+    s = PlaylistSyncer(fake, tz=HOBART)
+    plan = s.plan_backfill(since=(2026, 8), until=(2026, 10))
+    assert plan.months == [(2026, 8), (2026, 10)]  # November excluded, empty September absent
+    s.run_backfill(plan)
+    assert [p["name"] for p in fake.created] == ["August 2026", "October 2026"]
+
+
+def test_backfill_single_month_range():
+    plan = PlaylistSyncer(FakeSpotify(LIKED), tz=HOBART).plan_backfill(since=(2026, 10), until=(2026, 10))
+    assert plan.months == [(2026, 10)]
+    assert [t.uri for t in plan.buckets[(2026, 10)]] == ["spotify:track:o1", "spotify:track:o2"]
+
+
+def test_backfill_range_end_uses_local_month():
+    # 22:00 UTC on 31 Oct is 1 Nov in Hobart, so an October-only range excludes it
+    plan = PlaylistSyncer(FakeSpotify(LIKED), tz=HOBART).plan_backfill(since=(2026, 10), until=(2026, 10))
+    assert "spotify:track:n1" not in [t.uri for t in plan.buckets[(2026, 10)]]
+
+
 def test_backfill_from_month_with_no_songs_is_empty():
     plan = PlaylistSyncer(FakeSpotify(LIKED), tz=HOBART).plan_backfill(since=(2026, 12))
     assert plan.months == []

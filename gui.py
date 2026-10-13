@@ -105,8 +105,11 @@ class App(ctk.CTk):
         ctk.set_appearance_mode("system")
         self.title("Spotify Monthly Playlists")
         apply_icon(self)
-        self.geometry("900x900")
-        self.minsize(780, 740)
+        # fit on smaller / scaled screens: cap the starting height to the screen
+        scale = self._get_window_scaling()
+        height = min(950, int(self.winfo_screenheight() / scale) - 90)
+        self.geometry(f"900x{height}")
+        self.minsize(780, min(720, height))
 
         self.events: queue.Queue = queue.Queue()
         self.busy = False
@@ -189,37 +192,57 @@ class App(ctk.CTk):
     def _build_backfill(self, pad: dict, years: list[str]):
         frame = ctk.CTkFrame(self)
         frame.pack(fill="x", **pad)
-        ctk.CTkLabel(frame, text="Backfill", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(12, 10), pady=10)
+        update = lambda *_: self._update_backfill_controls()  # noqa: E731
 
+        row1 = ctk.CTkFrame(frame, fg_color="transparent")
+        row1.pack(fill="x", pady=(8, 0))
+        ctk.CTkLabel(row1, text="Backfill", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(12, 10))
         self.bf_mode = ctk.StringVar(value="all")
-        ctk.CTkRadioButton(frame, text="All months", variable=self.bf_mode, value="all",
-                           command=self._update_backfill_controls).pack(side="left")
-        ctk.CTkRadioButton(frame, text="From", variable=self.bf_mode, value="from", width=60,
-                           command=self._update_backfill_controls).pack(side="left", padx=(12, 6))
-        self.bf_month_var = ctk.StringVar(value=pl.MONTH_NAMES[0])
-        self.bf_year_var = ctk.StringVar(value=years[0])  # January of the current year
-        self.bf_month_menu = ctk.CTkOptionMenu(frame, values=pl.MONTH_NAMES, variable=self.bf_month_var, width=120,
-                                               command=lambda _: self._update_backfill_controls())
-        self.bf_month_menu.pack(side="left")
-        self.bf_year_menu = ctk.CTkOptionMenu(frame, values=years, variable=self.bf_year_var, width=80,
-                                              command=lambda _: self._update_backfill_controls())
-        self.bf_year_menu.pack(side="left", padx=6)
-
-        self.backfill_btn = ctk.CTkButton(frame, text="Backfill all months", width=200, command=self.do_backfill)
+        for text, value in (("All months", "all"), ("From a month onwards", "from"), ("Range", "range")):
+            ctk.CTkRadioButton(row1, text=text, variable=self.bf_mode, value=value,
+                               command=update).pack(side="left", padx=(0, 14))
+        self.backfill_btn = ctk.CTkButton(row1, text="Backfill all months", width=200, command=self.do_backfill)
         self.backfill_btn.pack(side="right", padx=12)
+
+        row2 = ctk.CTkFrame(frame, fg_color="transparent")
+        row2.pack(fill="x", pady=(6, 10))
+        cur_y, cur_m = pl.current_month()
+
+        def picker(label: str, month: str, year: str):
+            ctk.CTkLabel(row2, text=label, width=40, anchor="e").pack(side="left", padx=(12, 6))
+            m_var, y_var = ctk.StringVar(value=month), ctk.StringVar(value=year)
+            m_menu = ctk.CTkOptionMenu(row2, values=pl.MONTH_NAMES, variable=m_var, width=120, command=update)
+            m_menu.pack(side="left")
+            y_menu = ctk.CTkOptionMenu(row2, values=years, variable=y_var, width=80, command=update)
+            y_menu.pack(side="left", padx=(6, 10))
+            return m_var, y_var, (m_menu, y_menu)
+
+        # defaults: January of this year to the current month
+        self.bf_month_var, self.bf_year_var, self._bf_start_menus = picker("Start", pl.MONTH_NAMES[0], str(cur_y))
+        self.bf_end_month_var, self.bf_end_year_var, self._bf_end_menus = picker(
+            "End", pl.MONTH_NAMES[cur_m - 1], str(cur_y))
         self._update_backfill_controls()
 
+    def backfill_range(self) -> tuple[pl.YearMonth | None, pl.YearMonth | None]:
+        """(start, end) for the chosen backfill mode; None means unbounded."""
+        def ym(month_var, year_var):
+            return int(year_var.get()), pl.MONTH_NAMES.index(month_var.get()) + 1
+
+        mode = self.bf_mode.get()
+        start = ym(self.bf_month_var, self.bf_year_var) if mode in ("from", "range") else None
+        end = ym(self.bf_end_month_var, self.bf_end_year_var) if mode == "range" else None
+        return start, end
+
     def backfill_since(self) -> pl.YearMonth | None:
-        if self.bf_mode.get() != "from":
-            return None
-        return int(self.bf_year_var.get()), pl.MONTH_NAMES.index(self.bf_month_var.get()) + 1
+        return self.backfill_range()[0]
 
     def _update_backfill_controls(self):
-        since = self.backfill_since()
-        state = "normal" if since else "disabled"
-        self.bf_month_menu.configure(state=state)
-        self.bf_year_menu.configure(state=state)
-        self.backfill_btn.configure(text=f"Backfill from {pl.playlist_name(*since)}" if since else "Backfill all months")
+        start, end = self.backfill_range()
+        for w in self._bf_start_menus:
+            w.configure(state="normal" if start else "disabled")
+        for w in self._bf_end_menus:
+            w.configure(state="normal" if end else "disabled")
+        self.backfill_btn.configure(text="Backfill " + describe_range(start, end))
 
     def _build_schedule(self, pad: dict):
         frame = ctk.CTkFrame(self)
@@ -564,24 +587,38 @@ class App(ctk.CTk):
         self.run_bg(f"Syncing {pl.playlist_name(y, m)}...", lambda: syncer.sync_one(y, m, public))
 
     def do_backfill(self):
-        since = self.backfill_since()
+        since, until = self.backfill_range()
         if since and since > pl.current_month():
             messagebox.showerror("Backfill", f"{pl.playlist_name(*since)} is in the future. Pick an earlier month.", parent=self)
             return
+        if since and until and until < since:
+            messagebox.showerror("Backfill", "The end month is before the start month. Pick an end month "
+                                 "the same as or after the start.", parent=self)
+            return
         syncer = self.new_syncer()
-        self.run_bg("Scanning Liked Songs...", lambda: syncer.plan_backfill(since),
-                    lambda plan: self._confirm_backfill(syncer, plan, since))
+        self.run_bg("Scanning Liked Songs...", lambda: syncer.plan_backfill(since, until),
+                    lambda plan: self._confirm_backfill(syncer, plan, since, until))
 
-    def _confirm_backfill(self, syncer: PlaylistSyncer, plan: BackfillPlan, since: pl.YearMonth | None = None):
+    def _confirm_backfill(self, syncer: PlaylistSyncer, plan: BackfillPlan,
+                          since: pl.YearMonth | None = None, until: pl.YearMonth | None = None):
+        if since and until:
+            scope = (f"in {pl.playlist_name(*since)}" if since == until
+                     else f"between {pl.playlist_name(*since)} and {pl.playlist_name(*until)}")
+        elif since:
+            scope = f"from {pl.playlist_name(*since)} onwards"
+        else:
+            scope = "in your whole library"
         if not plan.months:
-            where = f" since {pl.playlist_name(*since)}" if since else ""
-            messagebox.showinfo("Backfill", f"No liked songs found{where}.", parent=self)
+            messagebox.showinfo("Backfill", f"No liked songs found {scope}.", parent=self)
             return
         first, last = pl.playlist_name(*plan.months[0]), pl.playlist_name(*plan.months[-1])
         span = "1 month" if len(plan.months) == 1 else f"{len(plan.months)} months"
-        scope = f"from {pl.playlist_name(*since)} onwards" if since else "in your whole library"
+        if since and until and plan.months[0] == since and plan.months[-1] == until:
+            found = ""  # songs span exactly the chosen range; don't repeat it
+        else:
+            found = f" ({first} to {last})" if first != last else f" ({first})"
         msg = (
-            f"Found liked songs in {span} {scope} ({first} to {last}).\n\n"
+            f"Found liked songs in {span} {scope}{found}.\n\n"
             f"{plural(len(plan.to_create), 'new playlist')} will be created.\n"
             f"{plural(len(plan.to_update), 'existing playlist')} will be checked for new tracks.\n\n"
             "Continue?"
@@ -607,6 +644,19 @@ class App(ctk.CTk):
             f"Backfill done: {counts['created']} created, {counts['updated']} updated, "
             f"{counts['unchanged']} already up to date."
         )
+
+
+def describe_range(start: pl.YearMonth | None, end: pl.YearMonth | None) -> str:
+    """'all months' / 'from March 2025' / 'March 2025 to June 2026' / 'up to June 2026'."""
+    if start and end:
+        if start == end:
+            return pl.playlist_name(*start)
+        return f"{pl.playlist_name(*start)} to {pl.playlist_name(*end)}"
+    if start:
+        return f"from {pl.playlist_name(*start)}"
+    if end:
+        return f"up to {pl.playlist_name(*end)}"
+    return "all months"
 
 
 def _clip(s: str, n: int) -> str:
