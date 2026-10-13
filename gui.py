@@ -105,8 +105,8 @@ class App(ctk.CTk):
         ctk.set_appearance_mode("system")
         self.title("Spotify Monthly Playlists")
         apply_icon(self)
-        self.geometry("900x870")
-        self.minsize(780, 710)
+        self.geometry("900x900")
+        self.minsize(780, 740)
 
         self.events: queue.Queue = queue.Queue()
         self.busy = False
@@ -158,12 +158,12 @@ class App(ctk.CTk):
         actions.pack(fill="x", **pad)
         self.preview_btn = ctk.CTkButton(actions, text="Preview", command=self.do_preview)
         self.sync_btn = ctk.CTkButton(actions, text="Create / Update Playlist", command=self.do_sync)
-        self.backfill_btn = ctk.CTkButton(actions, text="Backfill all months", command=self.do_backfill)
         self.cancel_btn = ctk.CTkButton(actions, text="Cancel", width=90, fg_color="gray40", command=self.cancel)
-        for b in (self.preview_btn, self.sync_btn, self.backfill_btn):
+        for b in (self.preview_btn, self.sync_btn):
             b.pack(side="left", padx=(12, 0), pady=10)
         self.cancel_btn.pack(side="right", padx=12)
 
+        self._build_backfill(pad, years)
         self._build_schedule(pad)
 
         prog = ctk.CTkFrame(self, fg_color="transparent")
@@ -180,11 +180,46 @@ class App(ctk.CTk):
         self.preview_box.configure(state="disabled")
 
         ctk.CTkLabel(self, text="Log", anchor="w", font=ctk.CTkFont(weight="bold")).pack(fill="x", padx=16)
-        self.log_box = ctk.CTkTextbox(self, height=160, font=ctk.CTkFont(family=MONO, size=12))
+        self.log_box = ctk.CTkTextbox(self, height=140, font=ctk.CTkFont(family=MONO, size=12))
         self.log_box.pack(fill="both", padx=12, pady=(2, 12))
         self.log_box.configure(state="disabled")
 
         self._refresh_buttons()
+
+    def _build_backfill(self, pad: dict, years: list[str]):
+        frame = ctk.CTkFrame(self)
+        frame.pack(fill="x", **pad)
+        ctk.CTkLabel(frame, text="Backfill", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(12, 10), pady=10)
+
+        self.bf_mode = ctk.StringVar(value="all")
+        ctk.CTkRadioButton(frame, text="All months", variable=self.bf_mode, value="all",
+                           command=self._update_backfill_controls).pack(side="left")
+        ctk.CTkRadioButton(frame, text="From", variable=self.bf_mode, value="from", width=60,
+                           command=self._update_backfill_controls).pack(side="left", padx=(12, 6))
+        self.bf_month_var = ctk.StringVar(value=pl.MONTH_NAMES[0])
+        self.bf_year_var = ctk.StringVar(value=years[0])  # January of the current year
+        self.bf_month_menu = ctk.CTkOptionMenu(frame, values=pl.MONTH_NAMES, variable=self.bf_month_var, width=120,
+                                               command=lambda _: self._update_backfill_controls())
+        self.bf_month_menu.pack(side="left")
+        self.bf_year_menu = ctk.CTkOptionMenu(frame, values=years, variable=self.bf_year_var, width=80,
+                                              command=lambda _: self._update_backfill_controls())
+        self.bf_year_menu.pack(side="left", padx=6)
+
+        self.backfill_btn = ctk.CTkButton(frame, text="Backfill all months", width=200, command=self.do_backfill)
+        self.backfill_btn.pack(side="right", padx=12)
+        self._update_backfill_controls()
+
+    def backfill_since(self) -> pl.YearMonth | None:
+        if self.bf_mode.get() != "from":
+            return None
+        return int(self.bf_year_var.get()), pl.MONTH_NAMES.index(self.bf_month_var.get()) + 1
+
+    def _update_backfill_controls(self):
+        since = self.backfill_since()
+        state = "normal" if since else "disabled"
+        self.bf_month_menu.configure(state=state)
+        self.bf_year_menu.configure(state=state)
+        self.backfill_btn.configure(text=f"Backfill from {pl.playlist_name(*since)}" if since else "Backfill all months")
 
     def _build_schedule(self, pad: dict):
         frame = ctk.CTkFrame(self)
@@ -529,21 +564,29 @@ class App(ctk.CTk):
         self.run_bg(f"Syncing {pl.playlist_name(y, m)}...", lambda: syncer.sync_one(y, m, public))
 
     def do_backfill(self):
+        since = self.backfill_since()
+        if since and since > pl.current_month():
+            messagebox.showerror("Backfill", f"{pl.playlist_name(*since)} is in the future. Pick an earlier month.", parent=self)
+            return
         syncer = self.new_syncer()
-        self.run_bg("Scanning Liked Songs...", syncer.plan_backfill, lambda plan: self._confirm_backfill(syncer, plan))
+        self.run_bg("Scanning Liked Songs...", lambda: syncer.plan_backfill(since),
+                    lambda plan: self._confirm_backfill(syncer, plan, since))
 
-    def _confirm_backfill(self, syncer: PlaylistSyncer, plan: BackfillPlan):
+    def _confirm_backfill(self, syncer: PlaylistSyncer, plan: BackfillPlan, since: pl.YearMonth | None = None):
         if not plan.months:
-            messagebox.showinfo("Backfill", "No liked songs found.", parent=self)
+            where = f" since {pl.playlist_name(*since)}" if since else ""
+            messagebox.showinfo("Backfill", f"No liked songs found{where}.", parent=self)
             return
         first, last = pl.playlist_name(*plan.months[0]), pl.playlist_name(*plan.months[-1])
+        span = "1 month" if len(plan.months) == 1 else f"{len(plan.months)} months"
+        scope = f"from {pl.playlist_name(*since)} onwards" if since else "in your whole library"
         msg = (
-            f"Found liked songs in {len(plan.months)} months ({first} to {last}).\n\n"
+            f"Found liked songs in {span} {scope} ({first} to {last}).\n\n"
             f"{plural(len(plan.to_create), 'new playlist')} will be created.\n"
             f"{plural(len(plan.to_update), 'existing playlist')} will be checked for new tracks.\n\n"
             "Continue?"
         )
-        if not messagebox.askyesno("Backfill all months", msg, parent=self):
+        if not messagebox.askyesno("Backfill playlists", msg, parent=self):
             self.append_log("Backfill cancelled.")
             return
         public = self.public_var.get()

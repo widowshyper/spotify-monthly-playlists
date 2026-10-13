@@ -121,6 +121,30 @@ def test_preview_lists_only_tracks_that_would_be_added():
     assert pv.existing_playlist["id"] == "x"
 
 
+def test_backfill_from_month_only_includes_that_month_onwards_and_stops_paging():
+    fake = FakeSpotify(LIKED)
+    s = PlaylistSyncer(fake, tz=HOBART)
+    plan = s.plan_backfill(since=(2026, 10))
+    assert plan.months == [(2026, 10), (2026, 11)]  # August excluded
+    assert fake.saved_read == 5  # read up to the first August entry, then stopped
+    results = s.run_backfill(plan)
+    assert [r.name for r in results] == ["October 2026", "November 2026"]
+    assert [p["name"] for p in fake.created] == ["October 2026", "November 2026"]
+
+
+def test_backfill_from_month_respects_local_timezone_boundary():
+    # 22:00 UTC on 31 Oct is 1 Nov in Hobart, so it belongs to a November backfill
+    fake = FakeSpotify(LIKED)
+    plan = PlaylistSyncer(fake, tz=HOBART).plan_backfill(since=(2026, 11))
+    assert plan.months == [(2026, 11)]
+    assert [t.uri for t in plan.buckets[(2026, 11)]] == ["spotify:track:n1", "spotify:track:n2"]
+
+
+def test_backfill_from_month_with_no_songs_is_empty():
+    plan = PlaylistSyncer(FakeSpotify(LIKED), tz=HOBART).plan_backfill(since=(2026, 12))
+    assert plan.months == []
+
+
 def test_result_descriptions_use_correct_plurals():
     from sync import SyncResult
     assert SyncResult(2026, 8, "August 2026", "created", 1).describe() == "Created 'August 2026' with 1 track."

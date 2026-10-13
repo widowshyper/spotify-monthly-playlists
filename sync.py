@@ -152,8 +152,10 @@ class PlaylistSyncer:
         tracks = self.month_buckets((year, month)).get((year, month), [])
         return self.sync_month(year, month, tracks, public)
 
-    def plan_backfill(self) -> BackfillPlan:
-        plan = BackfillPlan(self.month_buckets(None))
+    def plan_backfill(self, since: YearMonth | None = None) -> BackfillPlan:
+        """Months with liked songs from `since` (inclusive) to now, or all months if None.
+        With `since`, Liked Songs are only read back to that month."""
+        plan = BackfillPlan(self.month_buckets(since))
         for ym in plan.months:
             (plan.to_update if self.find_existing(*ym) else plan.to_create).append(ym)
         return plan
