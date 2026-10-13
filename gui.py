@@ -105,8 +105,8 @@ class App(ctk.CTk):
         ctk.set_appearance_mode("system")
         self.title("Spotify Monthly Playlists")
         apply_icon(self)
-        self.geometry("900x840")
-        self.minsize(780, 680)
+        self.geometry("900x870")
+        self.minsize(780, 710)
 
         self.events: queue.Queue = queue.Queue()
         self.busy = False
@@ -123,6 +123,14 @@ class App(ctk.CTk):
     # ----- layout -----------------------------------------------------
     def _build(self):
         pad = {"padx": 12, "pady": 6}
+
+        banner = ctk.CTkFrame(self, corner_radius=0, fg_color=("#FFF4CE", "#4A3B00"))
+        banner.pack(fill="x")
+        ctk.CTkLabel(
+            banner,
+            text="⚠  Disclaimer: all code in this app is 100% AI-generated.",
+            text_color=("#5C4400", "#FFE69C"),
+        ).pack(pady=3)
 
         top = ctk.CTkFrame(self)
         top.pack(fill="x", **pad)
