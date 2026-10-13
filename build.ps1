@@ -15,6 +15,8 @@ if ($LASTEXITCODE -ne 0) { throw "Tests failed; not building." }
 
 & $py -m PyInstaller --noconfirm --clean --onefile --windowed `
     --name SpotifyMonthlyPlaylists `
+    --icon assets\icon.ico `
+    --add-data "assets;assets" `
     --collect-data customtkinter `
     main.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed." }

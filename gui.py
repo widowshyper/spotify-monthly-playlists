@@ -9,6 +9,7 @@ import queue
 import sys
 import threading
 import traceback
+import tkinter as tk
 import webbrowser
 from tkinter import messagebox
 from typing import Any, Callable
@@ -29,11 +30,25 @@ FIRST_YEAR = 2008  # Spotify launched in 2008
 MONO = "Consolas" if sys.platform == "win32" else "Courier"
 
 
+def apply_icon(win) -> None:
+    """Set the window/title-bar icon. Must run in __init__: CustomTkinter replaces
+    the icon with its own default ~200ms later unless iconbitmap() was called."""
+    try:
+        if sys.platform == "win32":
+            win.iconbitmap(str(config.resource_path("assets/icon.ico")))
+        else:
+            img = tk.PhotoImage(file=str(config.resource_path("assets/icon.png")))
+            win.iconphoto(True, img)
+            win._icon_ref = img  # keep a reference so Tk doesn't drop the image
+    except (tk.TclError, OSError):
+        log.warning("Could not load app icon", exc_info=True)
+
 
 class SettingsDialog(ctk.CTkToplevel):
     def __init__(self, master: "App", current: str | None):
         super().__init__(master)
         self.title("Settings")
+        apply_icon(self)
         self.geometry("520x260")
         self.resizable(False, False)
         self.result: str | None = None
@@ -82,6 +97,7 @@ class App(ctk.CTk):
         super().__init__()
         ctk.set_appearance_mode("system")
         self.title("Spotify Monthly Playlists")
+        apply_icon(self)
         self.geometry("900x840")
         self.minsize(780, 680)
 
@@ -540,4 +556,12 @@ def _clip(s: str, n: int) -> str:
 
 
 def run() -> None:
+    if sys.platform == "win32":
+        # Give the process its own taskbar identity, so Windows shows our icon
+        # instead of python.exe's when running from source.
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("SpotifyMonthlyPlaylists.App")
+        except (AttributeError, OSError):
+            pass
     App().mainloop()

@@ -39,6 +39,12 @@ def app_dir() -> Path:
     return base
 
 
+def resource_path(relative: str) -> Path:
+    """Path to a bundled read-only file (e.g. assets/icon.ico), in source or a PyInstaller exe."""
+    base = getattr(sys, "_MEIPASS", None) or Path(__file__).resolve().parent
+    return Path(base) / relative
+
+
 def config_path() -> Path:
     return app_dir() / "config.json"
 

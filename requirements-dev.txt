@@ -3,3 +3,5 @@ pytest>=8
 # IANA zone data for timezone tests on Windows (zoneinfo has no system DB there)
 tzdata
 pyinstaller>=6
+# only for tools/make_icon.py (regenerating assets/icon.*)
+pillow
