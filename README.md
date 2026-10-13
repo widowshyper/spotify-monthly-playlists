@@ -8,6 +8,7 @@
 
 **[Download the latest release](https://github.com/widowshyper/spotify-monthly-playlists/releases/latest)**
 · **[User guide (with screenshots)](docs/USER_GUIDE.md)**
+· **[MIT License](LICENSE)**
 
 ![Main window](docs/screenshots/main.png)
 
@@ -22,8 +23,8 @@ them, oldest first.
   name already exists (and you own it), only missing tracks are added. Playlists are
   never duplicated and tracks are never removed.
 - **Backfill** creates or updates a playlist for every month that has liked songs.
-  Choose **all months**, or **from** a chosen month and year onwards. It asks for
-  confirmation first and shows a progress bar.
+  Choose **all months**, **from** a chosen month onwards, or a **range** (start month
+  to end month). It asks for confirmation first and shows a progress bar.
 - **Auto-sync every X hours, days, weeks or months.** Set it once in the app and it
   keeps running via Windows Task Scheduler, even when the app is closed.
 - **`--auto` mode** runs headless for scheduled runs. It syncs last month and the current
@@ -272,3 +273,9 @@ Local files and entries with no item or URI are skipped.
 | *Network error* | Check your internet connection and retry. |
 | *Could not create the scheduled task* | Task Scheduler may be restricted on work-managed PCs. Try the manual Task Scheduler steps, or ask your IT admin. |
 | Scheduled run shows *not set up* | Open the app and click **Connect** once. Scheduled runs reuse that login. |
+
+## License
+
+[MIT](LICENSE) © 2026 widowshyper. You're free to use, modify and share this code,
+including commercially, as long as you keep the copyright and license notice. It's
+provided "as is", without warranty.

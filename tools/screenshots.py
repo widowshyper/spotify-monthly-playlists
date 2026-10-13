@@ -202,10 +202,13 @@ def main() -> None:
                 time.sleep(0.1)
 
         threading.Thread(target=answer_dialog, daemon=True).start()
-        # show the "From <month> <year>" option: January of the current year
-        app.bf_mode.set("from")
+        # show the "Range" option: January to June of the current year
+        year = str(datetime.now().year)
+        app.bf_mode.set("range")
         app.bf_month_var.set("January")
-        app.bf_year_var.set(str(datetime.now().year))
+        app.bf_year_var.set(year)
+        app.bf_end_month_var.set("June")
+        app.bf_end_year_var.set(year)
         app._update_backfill_controls()
         app.do_backfill()
         wait_idle(step_backfill_shot, 1500)

@@ -78,7 +78,7 @@ From top to bottom:
 | **Make new playlists public** | Off by default, so new playlists are private. Only affects playlists the app *creates*. Existing playlists are never changed. |
 | **Preview** | Shows which songs would be added, without changing anything. |
 | **Create / Update Playlist** | Creates the playlist for the selected month, or adds any missing songs to it. |
-| **Backfill row** | Does the same for many months: **All months**, or **From** a chosen month and year up to now. See [section 7](#7-backfill-many-months-at-once). |
+| **Backfill panel** | Does the same for many months: **All months**, **From a month onwards**, or a **Range** of months. See [section 7](#7-backfill-many-months-at-once). |
 | **Cancel** | Stops a running backfill or login. |
 | **Auto-sync row** | Runs the app automatically on a schedule. See [section 8](#8-turn-on-automatic-sync). |
 | **Progress bar** | Busy indicator, or "N / M months" during a backfill. |
@@ -121,16 +121,24 @@ It's always safe to click again:
 
 ## 7. Backfill many months at once
 
-The **Backfill** row creates or updates a playlist for many months in one go. Choose
-how far back to go:
+The **Backfill** panel creates or updates a playlist for many months in one go. Pick
+which months:
 
-- **All months**: every month in your Liked Songs history. The button reads
-  **Backfill all months**.
-- **From [Month] [Year]**: only that month and every month after it, up to now. Pick
-  a month and year, and the button changes to e.g. **Backfill from January 2026**.
-  This is quicker for big libraries, because the app stops reading your Liked Songs
-  once it reaches that month. It's handy if you already have older monthly playlists,
-  or only want recent ones. Months in the future aren't allowed.
+| Option | Months covered | Button reads e.g. |
+|--------|----------------|-------------------|
+| **All months** | Every month in your Liked Songs history. | **Backfill all months** |
+| **From a month onwards** | The **Start** month and every month after it, up to now. | **Backfill from January 2026** |
+| **Range** | Only the **Start** to **End** months, inclusive. | **Backfill March 2025 to June 2025** |
+
+- The **Start** and **End** pickers only become active when the option you chose
+  uses them.
+- To redo a **single month**, choose **Range** and set Start and End to the same
+  month. The button then reads e.g. **Backfill May 2025**.
+- **From** and **Range** are quicker for big libraries, because the app stops reading
+  your Liked Songs once it reaches the start month. They're handy if you already have
+  some monthly playlists, or only want a particular stretch of time.
+- The start can't be in the future, and the end can't be before the start. The app
+  tells you if either happens.
 
 Click the button. The app reads your Liked Songs, then asks for confirmation:
 
