@@ -22,7 +22,7 @@ import scheduler
 from auth import SpotifyAuth
 from errors import AuthError, ConfigError, SpotifyAppError
 from spotify_client import SpotifyClient
-from sync import BackfillPlan, Cancelled, PlaylistSyncer, Preview, SyncResult
+from sync import BackfillPlan, Cancelled, PlaylistSyncer, Preview, SyncResult, plural
 
 log = logging.getLogger("gui")
 
@@ -31,8 +31,15 @@ MONO = "Consolas" if sys.platform == "win32" else "Courier"
 
 
 def apply_icon(win) -> None:
-    """Set the window/title-bar icon. Must run in __init__: CustomTkinter replaces
-    the icon with its own default ~200ms later unless iconbitmap() was called."""
+    """Set the window/title-bar icon. Call it from __init__: CTk replaces the icon
+    with its own default ~200ms later unless iconbitmap() was called first, and
+    CTkToplevel replaces it unconditionally, so dialogs get it re-applied after that."""
+    _set_icon(win)
+    if isinstance(win, ctk.CTkToplevel):
+        win.after(300, lambda: _set_icon(win))
+
+
+def _set_icon(win) -> None:
     try:
         if sys.platform == "win32":
             win.iconbitmap(str(config.resource_path("assets/icon.ico")))
@@ -524,8 +531,8 @@ class App(ctk.CTk):
         first, last = pl.playlist_name(*plan.months[0]), pl.playlist_name(*plan.months[-1])
         msg = (
             f"Found liked songs in {len(plan.months)} months ({first} to {last}).\n\n"
-            f"{len(plan.to_create)} new playlists will be created.\n"
-            f"{len(plan.to_update)} existing playlists will be checked for new tracks.\n\n"
+            f"{plural(len(plan.to_create), 'new playlist')} will be created.\n"
+            f"{plural(len(plan.to_update), 'existing playlist')} will be checked for new tracks.\n\n"
             "Continue?"
         )
         if not messagebox.askyesno("Backfill all months", msg, parent=self):

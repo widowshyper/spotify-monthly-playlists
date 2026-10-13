@@ -121,6 +121,13 @@ def test_preview_lists_only_tracks_that_would_be_added():
     assert pv.existing_playlist["id"] == "x"
 
 
+def test_result_descriptions_use_correct_plurals():
+    from sync import SyncResult
+    assert SyncResult(2026, 8, "August 2026", "created", 1).describe() == "Created 'August 2026' with 1 track."
+    assert SyncResult(2026, 8, "August 2026", "created", 2).describe() == "Created 'August 2026' with 2 tracks."
+    assert SyncResult(2026, 8, "August 2026", "updated", 1).describe() == "Updated 'August 2026' with 1 new track."
+
+
 def test_backfill_plan_counts_and_run():
     fake = FakeSpotify(LIKED, playlists=[{"id": "x", "name": "August 2026", "owner": {"id": "me"}, "uris": []}])
     s = PlaylistSyncer(fake, tz=HOBART)

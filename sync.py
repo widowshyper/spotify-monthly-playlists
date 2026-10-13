@@ -19,6 +19,10 @@ from spotify_client import SpotifyClient
 Log = Callable[[str], None]
 
 
+def plural(n: int, noun: str) -> str:
+    return f"{n} {noun}" if n == 1 else f"{n} {noun}s"
+
+
 @dataclass
 class SyncResult:
     year: int
@@ -30,9 +34,9 @@ class SyncResult:
 
     def describe(self) -> str:
         if self.action == "created":
-            return f"Created '{self.name}' with {self.added} tracks."
+            return f"Created '{self.name}' with {plural(self.added, 'track')}."
         if self.action == "updated":
-            return f"Updated '{self.name}' with {self.added} new tracks."
+            return f"Updated '{self.name}' with {plural(self.added, 'new track')}."
         if self.action == "unchanged":
             return f"Skipped '{self.name}': already up to date."
         return f"Skipped '{self.name}': no liked songs that month."
