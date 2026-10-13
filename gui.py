@@ -4,10 +4,12 @@ results come back to the Tk thread through a queue polled with `after()`."""
 from __future__ import annotations
 
 import logging
+import os
 import queue
 import sys
 import threading
 import traceback
+import webbrowser
 from tkinter import messagebox
 from typing import Any, Callable
 
@@ -15,6 +17,7 @@ import customtkinter as ctk
 
 import config
 import playlist_logic as pl
+import scheduler
 from auth import SpotifyAuth
 from errors import AuthError, ConfigError, SpotifyAppError
 from spotify_client import SpotifyClient
@@ -24,6 +27,7 @@ log = logging.getLogger("gui")
 
 FIRST_YEAR = 2008  # Spotify launched in 2008
 MONO = "Consolas" if sys.platform == "win32" else "Courier"
+
 
 
 class SettingsDialog(ctk.CTkToplevel):
@@ -78,8 +82,8 @@ class App(ctk.CTk):
         super().__init__()
         ctk.set_appearance_mode("system")
         self.title("Spotify Monthly Playlists")
-        self.geometry("900x760")
-        self.minsize(760, 600)
+        self.geometry("900x840")
+        self.minsize(780, 680)
 
         self.events: queue.Queue = queue.Queue()
         self.busy = False
@@ -129,6 +133,8 @@ class App(ctk.CTk):
             b.pack(side="left", padx=(12, 0), pady=10)
         self.cancel_btn.pack(side="right", padx=12)
 
+        self._build_schedule(pad)
+
         prog = ctk.CTkFrame(self, fg_color="transparent")
         prog.pack(fill="x", padx=12)
         self.progress = ctk.CTkProgressBar(prog)
@@ -148,6 +154,48 @@ class App(ctk.CTk):
         self.log_box.configure(state="disabled")
 
         self._refresh_buttons()
+
+    def _build_schedule(self, pad: dict):
+        frame = ctk.CTkFrame(self)
+        frame.pack(fill="x", **pad)
+        saved = scheduler.saved_schedule()
+
+        row = ctk.CTkFrame(frame, fg_color="transparent")
+        row.pack(fill="x", pady=(8, 0))
+        ctk.CTkLabel(row, text="Auto-sync every", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=(12, 6))
+        self.every_var = ctk.StringVar(value=str(saved.every))
+        self.every_entry = ctk.CTkEntry(row, textvariable=self.every_var, width=48, justify="center")
+        self.every_entry.pack(side="left")
+        self.unit_var = ctk.StringVar(value=saved.unit)
+        self.unit_menu = ctk.CTkOptionMenu(row, values=scheduler.UNITS, variable=self.unit_var, width=100)
+        self.unit_menu.pack(side="left", padx=6)
+        ctk.CTkLabel(row, text="at").pack(side="left", padx=(4, 6))
+        self.at_var = ctk.StringVar(value=saved.at)
+        self.at_entry = ctk.CTkEntry(row, textvariable=self.at_var, width=64, justify="center")
+        self.at_entry.pack(side="left")
+
+        self.sched_log_btn = ctk.CTkButton(row, text="Open auto log", width=110, fg_color="gray40", command=self.open_auto_log)
+        self.sched_log_btn.pack(side="right", padx=(6, 12))
+        self.sched_off_btn = ctk.CTkButton(row, text="Turn off", width=80, fg_color="gray40", command=self.schedule_off)
+        self.sched_off_btn.pack(side="right", padx=(6, 0))
+        self.sched_run_btn = ctk.CTkButton(row, text="Run now", width=80, fg_color="gray40", command=self.schedule_run_now)
+        self.sched_run_btn.pack(side="right", padx=(6, 0))
+        self.sched_save_btn = ctk.CTkButton(row, text="Save schedule", width=110, command=self.schedule_save)
+        self.sched_save_btn.pack(side="right")
+
+        self.sched_status = ctk.CTkLabel(frame, text="Checking schedule...", anchor="w", justify="left", wraplength=720)
+        self.sched_status.pack(fill="x", padx=12, pady=(4, 8))
+
+        if not scheduler.is_supported():
+            for w in (self.every_entry, self.unit_menu, self.at_entry, self.sched_save_btn,
+                      self.sched_run_btn, self.sched_off_btn):
+                w.configure(state="disabled")
+            self.sched_status.configure(
+                text="Automatic scheduling is built in on Windows only. Elsewhere, run "
+                     "'main.py --auto' from cron or launchd."
+            )
+        else:
+            self._set_schedule_buttons(exists=False)
 
     # ----- helpers ----------------------------------------------------
     def _set_text(self, box: ctk.CTkTextbox, text: str):
@@ -222,6 +270,8 @@ class App(ctk.CTk):
                     self.progress.configure(mode="determinate")
                     self.progress.set(i / n if n else 1)
                     self.progress_label.configure(text=f"{i} / {n} months")
+                elif kind == "call":
+                    ev[1](ev[2])
                 elif kind == "finished":
                     _, cb, result, exc, tb = ev
                     # Go idle *before* the callback so it can start a follow-up job.
@@ -259,8 +309,103 @@ class App(ctk.CTk):
         self.cancel_event.set()
         self.append_log("Cancelling...")
 
+    def run_side(self, work: Callable[[], Any], on_done: Callable[[Any], None]):
+        """Quick background job that doesn't lock the UI (used for Task Scheduler calls)."""
+        def target():
+            try:
+                self.events.put(("call", on_done, work()))
+            except Exception as exc:
+                self.events.put(("call", self._on_schedule_error, exc))
+
+        threading.Thread(target=target, daemon=True).start()
+
+    # ----- automatic sync schedule ------------------------------------
+    def _set_schedule_buttons(self, exists: bool):
+        self.sched_run_btn.configure(state="normal" if exists else "disabled")
+        self.sched_off_btn.configure(state="normal" if exists else "disabled")
+        self.sched_save_btn.configure(text="Update schedule" if exists else "Save schedule")
+
+    def refresh_schedule_status(self):
+        if scheduler.is_supported():
+            self.run_side(scheduler.status, self._show_schedule_status)
+
+    def _show_schedule_status(self, st: scheduler.TaskStatus):
+        self._set_schedule_buttons(st.exists)
+        if not st.exists:
+            self.sched_status.configure(text="Off. Choose how often to sync and click Save schedule. "
+                                             "Runs even when this app is closed.")
+            return
+        parts = [f"On: syncs {scheduler.saved_schedule().describe()}."]
+        if st.status.lower() == "disabled":
+            parts.append("(Task is disabled in Task Scheduler.)")
+        elif st.next_run:
+            parts.append(f"Next run: {st.next_run}.")
+        if st.last_result and st.last_result != "has not run yet":
+            parts.append(f"Last run: {st.last_run} ({st.last_result}).")
+        self.sched_status.configure(text="  ".join(parts))
+
+    def _on_schedule_error(self, exc: Exception):
+        msg = str(exc)
+        self.append_log("ERROR: " + msg)
+        messagebox.showerror("Automatic sync", msg, parent=self)
+        self.refresh_schedule_status()
+
+    def _read_schedule(self) -> scheduler.Schedule | None:
+        try:
+            every = int(self.every_var.get().strip())
+        except ValueError:
+            messagebox.showerror("Automatic sync", "Enter a whole number for how often to sync.", parent=self)
+            return None
+        s = scheduler.Schedule(every, self.unit_var.get(), self.at_var.get().strip())
+        try:
+            s.validate()
+        except scheduler.ScheduleError as exc:
+            messagebox.showerror("Automatic sync", str(exc), parent=self)
+            return None
+        return s
+
+    def schedule_save(self):
+        s = self._read_schedule()
+        if s is None:
+            return
+        if self.user is None:
+            self.append_log("Note: scheduled runs use your saved login. Click Connect at least once or they will fail.")
+
+        def done(registered: scheduler.Schedule):
+            program, args, _wd = scheduler.launch_command()
+            self.append_log(f"Automatic sync scheduled {registered.describe()}.")
+            self.append_log(f"Task runs: {program} {args}. If you move the app, click Update schedule again.")
+            self.refresh_schedule_status()
+
+        self.run_side(lambda: scheduler.install(s), done)
+
+    def schedule_off(self):
+        def done(removed):
+            self.append_log("Automatic sync turned off." if removed else "Automatic sync was already off.")
+            self.refresh_schedule_status()
+
+        self.run_side(scheduler.remove, done)
+
+    def schedule_run_now(self):
+        def done(_):
+            self.append_log("Started a scheduled sync in the background. Results go to the auto log.")
+            self.after(4000, self.refresh_schedule_status)
+
+        self.run_side(scheduler.run_now, done)
+
+    def open_auto_log(self):
+        path = config.log_path("auto.log")
+        if not path.exists():
+            messagebox.showinfo("Automatic sync", "No automatic sync has run yet, so there's no log.", parent=self)
+            return
+        if sys.platform == "win32":
+            os.startfile(path)  # type: ignore[attr-defined]
+        else:
+            webbrowser.open(path.as_uri())
+
     # ----- startup / settings / auth ----------------------------------
     def _startup(self):
+        self.refresh_schedule_status()
         if not config.get_client_id():
             self.append_log("Welcome! Enter your Spotify Client ID to get started.")
             self.open_settings()

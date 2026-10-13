@@ -27,7 +27,8 @@ def find(root, path):
 @pytest.mark.parametrize(
     "s",
     [Schedule(0, "days"), Schedule(24, "hours"), Schedule(5, "months"), Schedule(1, "fortnights"),
-     Schedule(1, "days", "25:00"), Schedule(1, "days", "9am"), Schedule(1, "days", "")],
+     Schedule(1, "days", "25:00"), Schedule(1, "days", "9am"), Schedule(1, "days", ""),
+     Schedule(1, "weeks", "09:00", weekday=7)],
 )
 def test_invalid_schedules_rejected(s):
     with pytest.raises(ScheduleError):
@@ -91,6 +92,16 @@ def test_weekly_xml_runs_on_start_weekday():
     week = find(root, "t:Triggers/t:CalendarTrigger/t:ScheduleByWeek")
     assert find(week, "t:WeeksInterval").text == "1"
     assert find(week, "t:DaysOfWeek/t:Tuesday") is not None
+
+
+def test_weekly_pinned_weekday_is_kept_on_later_days():
+    pinned = Schedule(1, "weeks", "18:00").resolved(NOW)  # saved on a Tuesday
+    assert pinned.weekday == 1
+    later = datetime(2026, 10, 16, 10, 0)  # viewed on a Friday
+    assert pinned.describe(later) == "every Tuesday at 18:00"
+    assert Schedule.from_dict(pinned.to_dict()) == pinned
+    root = xml_for(Schedule(1, "weeks", "18:00", weekday=4))
+    assert find(root, "t:Triggers/t:CalendarTrigger/t:ScheduleByWeek/t:DaysOfWeek/t:Friday") is not None
 
 
 def test_monthly_xml_runs_on_the_1st_of_selected_months():

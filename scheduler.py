@@ -19,7 +19,7 @@ import subprocess
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -46,6 +46,13 @@ class Schedule:
     every: int = 1
     unit: str = "days"
     at: str = "09:00"  # local time HH:MM; for hours, the first run time
+    weekday: int | None = None  # weeks only: 0=Monday; fixed by resolved() when saved
+
+    def resolved(self, now: datetime | None = None) -> "Schedule":
+        """Pin down the weekday for weekly schedules (the day of the first run)."""
+        if self.unit == "weeks" and self.weekday is None:
+            return replace(self, weekday=next_start(self, now).weekday())
+        return self
 
     def validate(self) -> None:
         if self.unit not in UNITS:
@@ -54,6 +61,8 @@ class Schedule:
             raise ScheduleError(f"Enter a number from 1 to {MAX_EVERY[self.unit]} for {self.unit}.")
         if self.unit == "months" and self.every not in MONTH_INTERVALS:
             raise ScheduleError("For months, choose 1, 2, 3, 4, 6 or 12 (so it repeats evenly each year).")
+        if self.weekday is not None and self.weekday not in range(7):
+            raise ScheduleError("Invalid weekday.")
         parse_time(self.at)
 
     def describe(self, now: datetime | None = None) -> str:
@@ -63,7 +72,7 @@ class Schedule:
         if self.unit == "days":
             return f"every day at {self.at}" if n == 1 else f"every {n} days at {self.at}"
         if self.unit == "weeks":
-            day = _WEEKDAYS[next_start(self, now).weekday()]
+            day = _WEEKDAYS[self.resolved(now).weekday]
             return f"every {day} at {self.at}" if n == 1 else f"every {n} weeks on {day} at {self.at}"
         return f"on the 1st of every month at {self.at}" if n == 1 else f"on the 1st of every {n} months at {self.at}"
 
@@ -75,7 +84,9 @@ class Schedule:
         if not d:
             return cls()
         try:
-            return cls(int(d.get("every", 1)), str(d.get("unit", "days")), str(d.get("at", "09:00")))
+            wd = d.get("weekday")
+            return cls(int(d.get("every", 1)), str(d.get("unit", "days")), str(d.get("at", "09:00")),
+                       None if wd is None else int(wd))
         except (TypeError, ValueError):
             return cls()
 
@@ -140,6 +151,7 @@ def build_task_xml(
     """Task Scheduler 1.2 XML for the given schedule. Pure; no system access."""
     schedule.validate()
     now = now or datetime.now()
+    schedule = schedule.resolved(now)
     start = next_start(schedule, now)
 
     ET.register_namespace("", _NS)
@@ -171,7 +183,7 @@ def build_task_xml(
         elif schedule.unit == "weeks":
             by_week = el(trig, "ScheduleByWeek")
             el(by_week, "WeeksInterval", str(schedule.every))
-            el(el(by_week, "DaysOfWeek"), _WEEKDAYS[start.weekday()])
+            el(el(by_week, "DaysOfWeek"), _WEEKDAYS[schedule.weekday])
         else:
             by_month = el(trig, "ScheduleByMonth")
             el(el(by_month, "DaysOfMonth"), "Day", "1")
@@ -235,8 +247,10 @@ def _fail(proc: subprocess.CompletedProcess, what: str) -> ScheduleError:
     return ScheduleError(f"Could not {what}: {detail or f'schtasks exit code {proc.returncode}'}")
 
 
-def install(schedule: Schedule, task_name: str = TASK_NAME, enabled: bool = True) -> None:
-    """Create or replace the scheduled task, and remember the choice in config."""
+def install(schedule: Schedule, task_name: str = TASK_NAME, enabled: bool = True) -> Schedule:
+    """Create or replace the scheduled task, and remember the choice in config.
+    Returns the schedule as registered (weekday pinned for weekly schedules)."""
+    schedule = schedule.resolved()
     command, arguments, workdir = launch_command()
     xml = build_task_xml(schedule, command, arguments, workdir, enabled=enabled)
     fd, path = tempfile.mkstemp(suffix=".xml")
@@ -252,6 +266,7 @@ def install(schedule: Schedule, task_name: str = TASK_NAME, enabled: bool = True
         cfg = config.load_config()
         cfg["schedule"] = schedule.to_dict()
         config.save_config(cfg)
+    return schedule
 
 
 def remove(task_name: str = TASK_NAME) -> bool:
