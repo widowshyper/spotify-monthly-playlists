@@ -1,0 +1,5 @@
+-r requirements.txt
+pytest>=8
+# IANA zone data for timezone tests on Windows (zoneinfo has no system DB there)
+tzdata
+pyinstaller>=6
