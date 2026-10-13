@@ -193,7 +193,7 @@ def main() -> None:
     def step_backfill():
         def answer_dialog():  # the confirm box is a native modal dialog; capture it, then click Yes
             for _ in range(200):
-                hwnd = user32.FindWindowW(None, "Backfill all months")
+                hwnd = user32.FindWindowW(None, "Backfill playlists")
                 if hwnd:
                     time.sleep(0.6)
                     save(capture(hwnd)[0], "backfill_confirm.png")
@@ -202,6 +202,11 @@ def main() -> None:
                 time.sleep(0.1)
 
         threading.Thread(target=answer_dialog, daemon=True).start()
+        # show the "From <month> <year>" option: January of the current year
+        app.bf_mode.set("from")
+        app.bf_month_var.set("January")
+        app.bf_year_var.set(str(datetime.now().year))
+        app._update_backfill_controls()
         app.do_backfill()
         wait_idle(step_backfill_shot, 1500)
 

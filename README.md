@@ -21,8 +21,9 @@ them, oldest first.
 - **Create / Update** a single month. Re-running is safe: if a playlist with that exact
   name already exists (and you own it), only missing tracks are added. Playlists are
   never duplicated and tracks are never removed.
-- **Backfill all months** creates or updates a playlist for every month that has liked
-  songs. It asks for confirmation first and shows a progress bar.
+- **Backfill** creates or updates a playlist for every month that has liked songs.
+  Choose **all months**, or **from** a chosen month and year onwards. It asks for
+  confirmation first and shows a progress bar.
 - **Auto-sync every X hours, days, weeks or months.** Set it once in the app and it
   keeps running via Windows Task Scheduler, even when the app is closed.
 - **`--auto` mode** runs headless for scheduled runs. It syncs last month and the current

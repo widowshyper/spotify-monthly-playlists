@@ -15,7 +15,7 @@ playlists. Screenshots use made-up demo songs and a demo account.
 4. [A tour of the main window](#4-a-tour-of-the-main-window)
 5. [Preview a month](#5-preview-a-month)
 6. [Create or update a month's playlist](#6-create-or-update-a-months-playlist)
-7. [Backfill every month at once](#7-backfill-every-month-at-once)
+7. [Backfill many months at once](#7-backfill-many-months-at-once)
 8. [Turn on automatic sync](#8-turn-on-automatic-sync)
 9. [Disconnecting, privacy and where things are stored](#9-disconnecting-privacy-and-where-things-are-stored)
 10. [FAQ](#10-faq)
@@ -78,7 +78,7 @@ From top to bottom:
 | **Make new playlists public** | Off by default, so new playlists are private. Only affects playlists the app *creates*. Existing playlists are never changed. |
 | **Preview** | Shows which songs would be added, without changing anything. |
 | **Create / Update Playlist** | Creates the playlist for the selected month, or adds any missing songs to it. |
-| **Backfill all months** | Does the same for every month you've ever liked songs in. |
+| **Backfill row** | Does the same for many months: **All months**, or **From** a chosen month and year up to now. See [section 7](#7-backfill-many-months-at-once). |
 | **Cancel** | Stops a running backfill or login. |
 | **Auto-sync row** | Runs the app automatically on a schedule. See [section 8](#8-turn-on-automatic-sync). |
 | **Progress bar** | Busy indicator, or "N / M months" during a backfill. |
@@ -119,10 +119,20 @@ It's always safe to click again:
 - It **never removes** songs, so songs you add to the playlist yourself stay put.
 - New playlists get the description *"Liked songs from October 2026. Auto-generated."*
 
-## 7. Backfill every month at once
+## 7. Backfill many months at once
 
-Click **Backfill all months** to build a playlist for every month in your Liked Songs
-history. The app first reads your whole library, then asks for confirmation:
+The **Backfill** row creates or updates a playlist for many months in one go. Choose
+how far back to go:
+
+- **All months**: every month in your Liked Songs history. The button reads
+  **Backfill all months**.
+- **From [Month] [Year]**: only that month and every month after it, up to now. Pick
+  a month and year, and the button changes to e.g. **Backfill from January 2026**.
+  This is quicker for big libraries, because the app stops reading your Liked Songs
+  once it reaches that month. It's handy if you already have older monthly playlists,
+  or only want recent ones. Months in the future aren't allowed.
+
+Click the button. The app reads your Liked Songs, then asks for confirmation:
 
 ![Backfill confirmation](screenshots/backfill_confirm.png)
 
