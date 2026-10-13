@@ -1,0 +1,40 @@
+# --- Secrets & user data (never commit) ---
+# Token cache and config containing the Spotify Client ID
+token.json
+token_cache.json
+.cache
+.cache-*
+config.json
+config.ini
+settings.json
+*.token
+.env
+.env.*
+
+# Logs
+*.log
+logs/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# --- PyInstaller output ---
+build/
+dist/
+*.spec
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
